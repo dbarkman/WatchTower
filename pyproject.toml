@@ -1,0 +1,21 @@
+[project]
+name = "watchtower"
+version = "0.1.0"
+description = "Lightweight server health monitoring — check remote endpoints, expose local health, alert on failures."
+requires-python = ">=3.12"
+dependencies = [
+    "requests==2.32.3",
+    "python-dotenv==1.0.0",
+    "fastapi==0.115.12",
+    "uvicorn==0.34.2",
+    "pyyaml==6.0.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==8.3.5",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
