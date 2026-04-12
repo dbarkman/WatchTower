@@ -7,7 +7,7 @@ from watchtower.checks import CheckResult, OK, WARNING, CRITICAL
 def run(config: dict) -> list[CheckResult]:
     try:
         out = subprocess.run(
-            ["fail2ban-client", "status"],
+            ["sudo", "fail2ban-client", "status"],
             capture_output=True, text=True, timeout=10,
         )
         if out.returncode != 0:
@@ -31,7 +31,7 @@ def run(config: dict) -> list[CheckResult]:
     for jail in jails:
         try:
             out = subprocess.run(
-                ["fail2ban-client", "status", jail],
+                ["sudo", "fail2ban-client", "status", jail],
                 capture_output=True, text=True, timeout=5,
             )
             banned = 0

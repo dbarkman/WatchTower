@@ -18,7 +18,7 @@ def run(config: dict) -> list[CheckResult]:
 
     try:
         out = subprocess.run(
-            ["grep", "Failed password", log_path],
+            ["sudo", "grep", "Failed password", log_path],
             capture_output=True, text=True, timeout=10,
         )
     except Exception as e:

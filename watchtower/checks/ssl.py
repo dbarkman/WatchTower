@@ -9,7 +9,7 @@ def _cert_expiry(cert_path: str) -> datetime | None:
     """Get expiry date from a PEM certificate file."""
     try:
         out = subprocess.run(
-            ["openssl", "x509", "-enddate", "-noout", "-in", cert_path],
+            ["sudo", "openssl", "x509", "-enddate", "-noout", "-in", cert_path],
             capture_output=True, text=True, timeout=5,
         )
         if out.returncode != 0:
@@ -27,10 +27,10 @@ def run(config: dict) -> list[CheckResult]:
     critical_days = config.get("critical_days", 7)
 
     if not certs:
-        # Auto-discover from /etc/letsencrypt/live/
+        # Auto-discover from /etc/letsencrypt/live/ (requires sudo — root-owned dir)
         try:
             out = subprocess.run(
-                ["ls", "/etc/letsencrypt/live/"],
+                ["sudo", "ls", "/etc/letsencrypt/live/"],
                 capture_output=True, text=True, timeout=5,
             )
             if out.returncode == 0:

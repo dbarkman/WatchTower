@@ -12,7 +12,7 @@ def run(config: dict) -> list[CheckResult]:
 
     try:
         out = subprocess.run(
-            ["grep", "-c", "oom-killer", log_path],
+            ["sudo", "grep", "-c", "oom-killer", log_path],
             capture_output=True, text=True, timeout=10,
         )
         # grep -c returns the match count; exit code 1 means zero matches
@@ -30,7 +30,7 @@ def run(config: dict) -> list[CheckResult]:
 
     try:
         out = subprocess.run(
-            ["grep", "Killed process", log_path],
+            ["sudo", "grep", "Killed process", log_path],
             capture_output=True, text=True, timeout=10,
         )
         if out.returncode == 0:
@@ -53,7 +53,7 @@ def run(config: dict) -> list[CheckResult]:
     if recent > 0:
         try:
             out = subprocess.run(
-                ["grep", "Killed process", log_path],
+                ["sudo", "grep", "Killed process", log_path],
                 capture_output=True, text=True, timeout=10,
             )
             if out.returncode == 0:
