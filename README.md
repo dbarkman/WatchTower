@@ -132,49 +132,113 @@ WatchTower/
 └── .env               # Webhook URLs, ntfy config
 ```
 
-## Roadmap: Server Health Checks
+## Server Health Checks
 
-Future versions will add local server auditing — a daily summary of how each server is doing. The monitor currently checks *remote reachability*; health checks will cover *local system state*.
+Daily local auditing — a summary of how each server is doing. The monitor checks *remote reachability*; health checks cover *local system state*.
 
-### Planned Checks
+```bash
+# Configure checks for this server
+cp config/checks.yaml.example config/checks.yaml
+# Edit thresholds, expected services, process names, etc.
 
-| Check | What It Does | Priority |
+# Run once
+uv run python -m watchtower.report --config config/checks.yaml
+
+# Set up cron for daily reports (e.g., 7am)
+# 0 7 * * * cd /path/to/WatchTower && /path/to/uv run python -m watchtower.report --config config/checks.yaml >> logs/report.log 2>&1
+```
+
+### Available Checks
+
+| Check | What It Does | Severity |
 |---|---|---|
-| **Disk space** | Alert when any partition exceeds 80%/90% usage | High |
-| **Auth logs** | Scan `/var/log/secure` for failed SSH attempts, brute force patterns | High |
-| **fail2ban** | Report banned IPs, jail status, recent bans | High |
-| **Syslog** | Scan `/var/log/messages` for errors, OOM kills, hardware warnings | Medium |
-| **Service status** | Verify configured systemd services are running | Medium |
-| **SSL certificates** | Warn when certs are within 14/7 days of expiry | Medium |
-| **System updates** | Report available security updates | Medium |
-| **Memory/swap** | Alert on high memory usage or swap activity | Low |
-| **CPU load** | Alert on sustained high load average | Low |
-| **Log rotation** | Verify log files aren't growing unbounded | Low |
-| **Open ports** | Compare listening ports against expected list, flag surprises | Low |
-| **Zombie processes** | Detect and report zombie/defunct processes | Low |
+| **Disk space** | Alert when partitions exceed 80%/90% usage | High |
+| **Memory/swap** | Alert on high swap usage (50%/80%) | High |
+| **OOM kills** | Scan syslog for out-of-memory kills in last 24h | High |
+| **Service status** | Verify configured systemd services are running, detect failed units | High |
+| **Auth logs** | Scan `/var/log/secure` for failed SSH attempts | High |
+| **fail2ban** | Report jail status and active bans | High |
+| **SSL certificates** | Warn when certs approach expiry (14/7 days). Auto-discovers from `/etc/letsencrypt/live/` | Medium |
+| **Process RSS** | Track memory of specific processes, catch leaks before they cause OOM | High |
 
-### Design Goals
+### Digest Format
 
-- **Daily digest** — one summary per server per day, not a flood of individual alerts
-- **Threshold-based** — only alert on things that need attention, not noise
-- **Low overhead** — shell commands + Python, no agents or daemons
-- **Portable** — works on Rocky/RHEL/Ubuntu/Debian without changes
-- **Configurable** — YAML config for what to check and what thresholds to use
-
-### Example Daily Report
+Reports are sorted by severity (critical first) and sent to Discord. Push alerts via ntfy only fire when issues are found (configurable).
 
 ```
-📊 Server Health — web2 (2026-04-10)
+Server Health — web1 (2026-04-11)
 
-Disk: / 45% | /var 62% — ✅
-Auth: 12 failed SSH attempts (3 IPs) — ✅ (below threshold)
-fail2ban: 2 IPs banned today, 5 total active bans — ✅
-Services: 4/4 running — ✅
-SSL: example.com expires in 47 days — ✅
-Updates: 3 security updates available — ⚠️
+🔴 OOM: 3 OOM kills in last 24h — victims: python3, python3
+🔴 Services: 3/4 running — DOWN: scrollforge
 
-No issues requiring attention.
+⚠️  Memory: RAM 430/3800 MB available | Swap 59% (298/512 MB)
+⚠️  Failed units: 2 failed: exits-check.service, morning-filter.service
+
+✅ Disk: / 27%
+✅ Auth: 8 failed SSH attempts (3 IPs)
+✅ fail2ban: 3 jails active, 1 IPs currently banned
+✅ SSL: dbarkman.com expires in 40d | redmesastudios.com expires in 33d
+✅ Process: one_cent_trader_ws.py: 262 MB RSS
+
+2 critical, 2 warnings, 5 OK
 ```
+
+### checks.yaml
+
+```yaml
+server_name: web1
+ntfy_topic: "WT-Health"
+
+checks:
+  disk:
+    partitions: ["/"]
+    warn_pct: 80
+    critical_pct: 90
+
+  memory:
+    swap_warn_pct: 50
+    swap_critical_pct: 80
+
+  oom:
+    log_path: /var/log/messages
+    warn_count: 1
+    critical_count: 5
+
+  services:
+    expected:
+      - httpd
+      - mariadb
+      - one_cent_trader_ws
+      - watchtower-health
+
+  auth:
+    log_path: /var/log/secure
+    warn_threshold: 50
+    critical_threshold: 200
+
+  fail2ban: {}
+
+  ssl:
+    warn_days: 14
+    critical_days: 7
+
+  process_rss:
+    processes:
+      - name: one_cent_trader_ws.py
+        warn_mb: 500
+        critical_mb: 1000
+```
+
+See `config/checks.yaml.example` for the full template with all options documented.
+
+### Roadmap
+
+| Check | What It Does | Status |
+|---|---|---|
+| System updates | Report available security updates | Planned |
+| CPU load | Alert on sustained high load average | Planned |
+| Log rotation | Verify log files aren't growing unbounded | Planned |
+| Open ports | Compare listening ports against expected list | Planned |
 
 ## License
 

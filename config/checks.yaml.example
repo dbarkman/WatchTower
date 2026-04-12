@@ -1,0 +1,66 @@
+# WatchTower Health Checks Configuration
+#
+# Copy to checks.yaml and customize for each server.
+# Run: uv run python -m watchtower.report --config config/checks.yaml
+#
+# Omit a check section entirely to skip it.
+
+# Server identity (used in report header)
+server_name: web1
+
+# Ntfy topic for push alerts (only fires when issues found)
+ntfy_topic: "WT-Health"
+
+# Set true to send ntfy even when everything is OK
+ntfy_always: false
+
+checks:
+  # Disk space — alert when partitions get full
+  disk:
+    partitions: ["/"]
+    warn_pct: 80
+    critical_pct: 90
+
+  # Memory/swap — alert on high swap usage
+  memory:
+    swap_warn_pct: 50
+    swap_critical_pct: 80
+
+  # OOM kills — scan syslog for out-of-memory events
+  oom:
+    log_path: /var/log/messages
+    warn_count: 1       # any OOM kill = warning
+    critical_count: 5   # 5+ in 24h = critical
+
+  # Service status — verify expected services are running
+  services:
+    expected:
+      - httpd
+      - mariadb
+      - fail2ban
+      - firewalld
+
+  # Auth logs — failed SSH attempts
+  auth:
+    log_path: /var/log/secure
+    warn_threshold: 50
+    critical_threshold: 200
+
+  # fail2ban jail status
+  fail2ban: {}
+
+  # SSL certificates — warn before expiry
+  # Certs auto-discovered from /etc/letsencrypt/live/ if not specified
+  ssl:
+    warn_days: 14
+    critical_days: 7
+    # Optionally list specific cert paths:
+    # certs:
+    #   - /etc/letsencrypt/live/example.com/fullchain.pem
+
+  # Process memory — watch specific processes for leaks
+  process_rss:
+    processes:
+      - name: one_cent_trader_ws.py
+        warn_mb: 500
+        critical_mb: 1000
