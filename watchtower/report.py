@@ -90,16 +90,46 @@ def format_digest(server_name: str, results: list[CheckResult]) -> str:
     return "\n".join(lines)
 
 
+def _format_ntfy_short(server_name: str, results: list[CheckResult]) -> str:
+    """Short ntfy message — just the problems, one line each."""
+    issues = [r for r in results if r.status != OK]
+    if not issues:
+        return f"{server_name}: all clear"
+    lines = []
+    for r in issues:
+        lines.append(f"{r.icon} {r.name}: {r.summary}")
+    return "\n".join(lines)
+
+
+def _format_discord_rich(server_name: str, results: list[CheckResult]) -> list[dict]:
+    """Rich Discord embed fields — grouped by severity."""
+    # Sort: critical first, then warning, then ok
+    priority = {CRITICAL: 0, WARNING: 1, OK: 2}
+    results.sort(key=lambda r: priority.get(r.status, 3))
+
+    fields = []
+    for r in results:
+        fields.append({
+            "name": f"{r.icon} {r.name}",
+            "value": r.summary,
+            "inline": True,
+        })
+    return fields
+
+
 def send_digest(server_name: str, results: list[CheckResult], config: dict):
     """Send the digest via configured alert channels."""
     digest = format_digest(server_name, results)
     logger.info(f"\n{digest}")
 
-    # Determine overall status for color/priority
     has_critical = any(r.status == CRITICAL for r in results)
     has_warning = any(r.status == WARNING for r in results)
 
-    # Discord
+    counts = {OK: 0, WARNING: 0, CRITICAL: 0}
+    for r in results:
+        counts[r.status] = counts.get(r.status, 0) + 1
+
+    # --- Discord: rich embed with fields ---
     if has_critical:
         color = 0xFF0000
         title = f"\U0001f534 {server_name} — Issues Found"
@@ -110,15 +140,44 @@ def send_digest(server_name: str, results: list[CheckResult], config: dict):
         color = 0x00FF00
         title = f"\u2705 {server_name} — All Clear"
 
-    send_discord(title, digest, color=color)
+    date_str = datetime.now().strftime("%Y-%m-%d %H:%M UTC")
+    footer_parts = []
+    if counts[CRITICAL]:
+        footer_parts.append(f"{counts[CRITICAL]} critical")
+    if counts[WARNING]:
+        footer_parts.append(f"{counts[WARNING]} warnings")
+    footer_parts.append(f"{counts[OK]} OK")
+    footer_text = f"{date_str} | {', '.join(footer_parts)}"
 
-    # ntfy — only send if there are issues (avoid daily noise for healthy servers)
+    fields = _format_discord_rich(server_name, results)
+
+    discord_url = os.getenv("DISCORD_WEBHOOK_URL", "")
+    if discord_url:
+        try:
+            import requests
+            requests.post(
+                discord_url,
+                json={"embeds": [{
+                    "title": title,
+                    "color": color,
+                    "fields": fields,
+                    "footer": {"text": footer_text},
+                }]},
+                timeout=10,
+            )
+        except Exception as e:
+            logger.warning(f"Discord alert failed: {e}")
+
+    # --- ntfy: short and simple (only on issues) ---
     ntfy_topic = config.get("ntfy_topic")
     if ntfy_topic and (has_critical or has_warning):
+        ntfy_title = f"{server_name}: {'CRITICAL' if has_critical else 'WARNING'}"
+        ntfy_body = _format_ntfy_short(server_name, results)
         priority = "urgent" if has_critical else "high"
-        send_ntfy(ntfy_topic, title, digest, priority=priority)
+        send_ntfy(ntfy_topic, ntfy_title, ntfy_body, priority=priority)
     elif ntfy_topic and config.get("ntfy_always", False):
-        send_ntfy(ntfy_topic, title, digest, priority="low")
+        send_ntfy(ntfy_topic, f"{server_name}: all clear",
+                  f"{counts[OK]} checks passed", priority="low")
 
 
 def main():
