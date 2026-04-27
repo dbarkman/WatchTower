@@ -64,3 +64,39 @@ checks:
       - name: one_cent_trader_ws.py
         warn_mb: 500
         critical_mb: 1000
+
+  # On-chain wallet balances — alert when running low on gas or capital.
+  # Uses raw JSON-RPC (no web3 dep). Native chain coin if `token` omitted.
+  # Each probe specifies its own RPC and thresholds.
+  wallets:
+    probes:
+      # Polygon native MATIC (gas for Polymarket redemptions)
+      - name: "Polygon MATIC"
+        rpc: "https://polygon-bor-rpc.publicnode.com"
+        wallet: "0x..."
+        decimals: 18
+        warn_below: 30
+        critical_below: 5
+      # Polygon USDC.e (Polymarket trading capital)
+      - name: "Polygon USDC.e"
+        rpc: "https://polygon-bor-rpc.publicnode.com"
+        wallet: "0x..."
+        token: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"
+        decimals: 6
+        warn_below: 100
+        critical_below: 50
+      # Base ETH (gas for Limitless redemptions)
+      - name: "Base ETH"
+        rpc: "https://mainnet.base.org"
+        wallet: "0x..."
+        decimals: 18
+        warn_below: 0.0005
+        critical_below: 0.0001
+      # Base USDC (Limitless trading capital)
+      - name: "Base USDC"
+        rpc: "https://mainnet.base.org"
+        wallet: "0x..."
+        token: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+        decimals: 6
+        warn_below: 90
+        critical_below: 50
