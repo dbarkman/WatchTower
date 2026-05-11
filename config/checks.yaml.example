@@ -100,3 +100,18 @@ checks:
         decimals: 6
         warn_below: 90
         critical_below: 50
+
+  # Cross-server peer reachability — each server pings the others' /health
+  # endpoints. Used by both daily digest and the high-cadence
+  # peers_monitor (which runs every 15 min with state-throttled alerts).
+  # List ONLY the OTHER servers from each server's checks.yaml.
+  peers:
+    timeout_seconds: 5
+    alert_repeat_hours: 4   # while a peer stays down, re-alert this often
+    hosts:
+      - name: web1
+        url: http://23.239.29.130:8100/health
+      - name: web2
+        url: http://104.237.153.4:8100/health
+      # - name: mum1
+      #   url: http://192.46.213.107:8100/health
