@@ -11,18 +11,17 @@ import requests
 
 logger = logging.getLogger(__name__)
 
-NTFY_URL = os.getenv('NTFY_URL', 'https://ntfy.sh')
-DISCORD_WEBHOOK_URL = os.getenv('DISCORD_WEBHOOK_URL', '')
 REQUEST_TIMEOUT = 10
 
 
 def send_discord(title: str, message: str, color: int = 0xFF0000):
     """Send an embed to Discord. Fails silently."""
-    if not DISCORD_WEBHOOK_URL:
+    webhook_url = os.getenv('DISCORD_WEBHOOK_URL', '')
+    if not webhook_url:
         return
     try:
         requests.post(
-            DISCORD_WEBHOOK_URL,
+            webhook_url,
             json={'embeds': [{'title': title, 'description': message, 'color': color}]},
             timeout=REQUEST_TIMEOUT,
         )
@@ -34,9 +33,10 @@ def send_ntfy(topic: str, title: str, message: str, priority: str = 'high'):
     """Send a push notification via ntfy. Fails silently."""
     if not topic:
         return
+    ntfy_url = os.getenv('NTFY_URL', 'https://ntfy.sh')
     try:
         requests.post(
-            f'{NTFY_URL}/{topic}',
+            f'{ntfy_url}/{topic}',
             data=message.encode('utf-8'),
             headers={'Title': title, 'Priority': priority},
             timeout=REQUEST_TIMEOUT,
