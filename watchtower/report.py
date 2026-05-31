@@ -18,7 +18,7 @@ import yaml
 from dotenv import load_dotenv
 
 from watchtower.checks import CheckResult, OK, WARNING, CRITICAL
-from watchtower.checks import disk, memory, oom, services, auth, fail2ban, ssl, process_rss, wallets
+from watchtower.checks import disk, memory, oom, services, auth, fail2ban, ssl, process_rss, wallets, uptime
 from watchtower.alerts import send_discord, send_ntfy
 
 load_dotenv()
@@ -30,6 +30,7 @@ logging.basicConfig(
 )
 
 CHECK_MODULES = {
+    "uptime": uptime,
     "disk": disk,
     "memory": memory,
     "oom": oom,
