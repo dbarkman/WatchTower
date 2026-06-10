@@ -65,6 +65,14 @@ checks:
         warn_mb: 500
         critical_mb: 1000
 
+  # OCT WebSocket liveness — age of the last settlement/fill in the trader log.
+  # Catches a silently-dead fills/positions socket (process stays up, events
+  # stop). Daily report shows the age; the every-3h cron alerts when stale.
+  oct_ws_liveness:
+    log_path: /var/www/html/WeatherForcaster/logs/one_cent_trader.log
+    warn_hours: 3
+    critical_hours: 6
+
   # On-chain wallet balances — alert when running low on gas or capital.
   # Uses raw JSON-RPC (no web3 dep). Native chain coin if `token` omitted.
   # Each probe specifies its own RPC and thresholds.
