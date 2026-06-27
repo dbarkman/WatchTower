@@ -48,7 +48,7 @@ def _log_age_seconds(path: str) -> float | None:
         return None
 
 
-@app.get('/health')
+@app.api_route('/health', methods=['GET', 'HEAD'])
 def health():
     running = _process_running(PROCESS_NAME)
     age = _log_age_seconds(LOG_PATH)
@@ -73,7 +73,7 @@ def health():
     )
 
 
-@app.get('/health/daemon')
+@app.api_route('/health/daemon', methods=['GET', 'HEAD'])
 def health_daemon():
     """Alias with age_seconds for compatibility with heartbeat-style monitors."""
     running = _process_running(PROCESS_NAME)
