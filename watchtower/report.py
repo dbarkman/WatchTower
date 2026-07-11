@@ -18,7 +18,7 @@ import yaml
 from dotenv import load_dotenv
 
 from watchtower.checks import CheckResult, OK, WARNING, CRITICAL
-from watchtower.checks import disk, memory, oom, services, auth, fail2ban, ssl, process_rss, wallets, uptime, oct_ws_liveness
+from watchtower.checks import disk, memory, oom, services, auth, fail2ban, ssl, process_rss, wallets, uptime, oct_ws_liveness, oct_liveness
 from watchtower.alerts import send_discord, send_ntfy
 
 load_dotenv()
@@ -41,6 +41,7 @@ CHECK_MODULES = {
     "process_rss": process_rss,
     "wallets": wallets,
     "oct_ws_liveness": oct_ws_liveness,
+    "oct_liveness": oct_liveness,
 }
 
 
