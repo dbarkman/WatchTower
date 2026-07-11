@@ -174,26 +174,47 @@ def _root_readonly() -> bool:
     return False
 
 
+_REAL_FS = {'ext4', 'ext3', 'ext2', 'xfs', 'btrfs'}
+
+
+def _real_mounts() -> list[str]:
+    """Mount points backed by a real block-device filesystem (e.g. /, /var).
+    Auto-adapts per server — web1 has separate / and /var disks, web2 just /."""
+    mounts = []
+    try:
+        with open('/proc/mounts') as f:
+            for line in f:
+                dev, mp, fstype = line.split()[:3]
+                if dev.startswith('/dev/') and fstype in _REAL_FS and mp not in mounts:
+                    mounts.append(mp)
+    except Exception:
+        pass
+    return mounts or ['/']
+
+
 @app.api_route('/health/resources', methods=['GET', 'HEAD'])
 def health_resources():
     """Intraday resource-exhaustion / pre-crash check for external monitors.
 
     Returns 503 the moment a runaway process pushes the box toward a crash —
-    BETWEEN the daily WatchTower reports. Triggers: disk full, inode exhaustion,
-    swap saturated, severe memory pressure, or root filesystem remounted
-    read-only. If the box is so far gone the endpoint can't respond, the monitor
-    sees it down — also an alert. Body is only resource metrics (no other data).
+    BETWEEN the daily WatchTower reports. Checks EVERY mounted disk (web1 has
+    separate / and /var), plus swap saturation, severe memory pressure, and
+    root filesystem remounted read-only. If the box is so far gone the endpoint
+    can't respond, the monitor sees it down — also an alert. Body is only
+    resource metrics (no other data).
     """
-    disk_pct = _disk_pct('/')
-    inode_pct = _inode_pct('/')
     swap_pct, mem_avail_pct = _mem_swap_pct()
     root_ro = _root_readonly()
 
     reasons = []
-    if disk_pct >= DISK_CRIT_PCT:
-        reasons.append(f'disk {disk_pct}%>={DISK_CRIT_PCT}%')
-    if inode_pct >= INODE_CRIT_PCT:
-        reasons.append(f'inodes {inode_pct}%>={INODE_CRIT_PCT}%')
+    disks = {}
+    for mp in _real_mounts():
+        d, i = _disk_pct(mp), _inode_pct(mp)
+        disks[mp] = {'disk_pct': d, 'inode_pct': i}
+        if d >= DISK_CRIT_PCT:
+            reasons.append(f'disk {mp} {d}%>={DISK_CRIT_PCT}%')
+        if i >= INODE_CRIT_PCT:
+            reasons.append(f'inodes {mp} {i}%>={INODE_CRIT_PCT}%')
     if swap_pct >= SWAP_CRIT_PCT:
         reasons.append(f'swap {swap_pct}%>={SWAP_CRIT_PCT}%')
     if mem_avail_pct <= MEM_AVAIL_MIN_PCT:
@@ -207,10 +228,44 @@ def health_resources():
         content={
             'status': 'critical' if critical else 'ok',
             'reasons': reasons,
-            'disk_pct': disk_pct,
-            'inode_pct': inode_pct,
+            'disks': disks,
             'swap_pct': swap_pct,
             'mem_avail_pct': mem_avail_pct,
             'root_readonly': root_ro,
+        },
+    )
+
+
+# --- EveryEarthquake ingest freshness (web2) -------------------------------
+
+EE_MARKER = os.getenv('WATCHTOWER_EE_MARKER', '')
+EE_MAX_AGE_MIN = float(os.getenv('WATCHTOWER_EE_MAX_AGE_MIN', '5'))
+
+
+@app.api_route('/health/ee-ingest', methods=['GET', 'HEAD'])
+def health_ee_ingest():
+    """EveryEarthquake per-minute ingest freshness for external monitors.
+
+    The minute-fetch systemd unit touches WATCHTOWER_EE_MARKER on each SUCCESSFUL
+    run (ExecStartPost only fires on exit 0). This returns 503 when that marker
+    is older than WATCHTOWER_EE_MAX_AGE_MIN — i.e. the fetch has been failing
+    (USGS down, DB down, or timer stopped) that long. 200 if fresh. Returns
+    200 'not-configured' where the marker isn't set (e.g. web1).
+    """
+    if not EE_MARKER:
+        return JSONResponse(status_code=200, content={'status': 'not-configured'})
+    try:
+        age_min = (time.time() - os.stat(EE_MARKER).st_mtime) / 60.0
+    except OSError:
+        return JSONResponse(
+            status_code=503,
+            content={'status': 'critical', 'reason': 'ingest marker missing'})
+    stale = age_min > EE_MAX_AGE_MIN
+    return JSONResponse(
+        status_code=503 if stale else 200,
+        content={
+            'status': 'critical' if stale else 'ok',
+            'last_success_min_ago': round(age_min, 1),
+            'max_age_min': EE_MAX_AGE_MIN,
         },
     )
