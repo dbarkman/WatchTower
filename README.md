@@ -47,13 +47,24 @@ Configure what it checks via environment variables:
 | `WATCHTOWER_PROCESS_NAME` | Process name to check via `pgrep` | *(none — skip check)* |
 | `WATCHTOWER_LOG_PATH` | Log file to check freshness | *(none — skip check)* |
 | `WATCHTOWER_STALE_SECONDS` | Max log age before "stale" | `300` |
+| `WATCHTOWER_DISK_CRIT_PCT` | `/health/resources` disk-full critical threshold | `90` |
+| `WATCHTOWER_INODE_CRIT_PCT` | `/health/resources` inode critical threshold | `90` |
+| `WATCHTOWER_SWAP_CRIT_PCT` | `/health/resources` swap-saturation critical threshold | `85` |
+| `WATCHTOWER_MEM_AVAIL_MIN_PCT` | `/health/resources` min MemAvailable %% before critical | `3` |
+| `WATCHTOWER_EE_MARKER` | Success-marker file path for `/health/ee-ingest` | *(none — endpoint returns not-configured)* |
+| `WATCHTOWER_EE_MAX_AGE_MIN` | Max marker age (min) before `/health/ee-ingest` reports 503 | `5` |
 
 With no process or log configured, `/health` returns `{"status": "healthy"}` as a basic liveness check.
 
 ### Endpoints
 
+All endpoints accept `GET` and `HEAD` and return **200 healthy / 503 on trouble**, so they're drop-in targets for external monitors (e.g. UptimeRobot).
+
 - `GET /health` — full health status with process and log checks
 - `GET /health/daemon` — same data, `age_seconds` field for heartbeat-style monitors
+- `GET /health/oct` — OCT trading liveness: every OCT systemd unit (v1 + v2) is active with a fresh log
+- `GET /health/resources` — resource-exhaustion / pre-crash check. Auto-detects **every** block-device mount (e.g. `/` and `/var`) and 503s on disk %, inode %, swap saturation, low `MemAvailable`, or a read-only root filesystem
+- `GET /health/ee-ingest` — EveryEarthquake per-minute ingest freshness: 503 when the success marker (`WATCHTOWER_EE_MARKER`, touched via the fetch unit's `ExecStartPost` on exit 0) is older than `WATCHTOWER_EE_MAX_AGE_MIN`. Returns `not-configured` where the marker env is unset
 
 ### systemd Service
 
