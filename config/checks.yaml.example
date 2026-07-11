@@ -73,6 +73,12 @@ checks:
     warn_hours: 3
     critical_hours: 6
 
+  # OCT process liveness (v1 + v2) — each trading unit is `systemctl is-active`
+  # AND writing its log recently. Catches down/wedged daemons. Units are defined
+  # in watchtower/checks/oct_liveness.py DEFAULT_UNITS; empty block enables it.
+  # Also runs standalone every 2 min (cron) with ntfy/Discord state-change alerts.
+  oct_liveness: {}
+
   # On-chain wallet balances — alert when running low on gas or capital.
   # Uses raw JSON-RPC (no web3 dep). Native chain coin if `token` omitted.
   # Each probe specifies its own RPC and thresholds.
