@@ -27,7 +27,10 @@ from watchtower.checks import CheckResult, OK, WARNING, CRITICAL
 DEFAULT_UNITS = [
     {"name": "OCT v1", "service": "one_cent_trader_ws",
      "log_path": "/var/www/html/WeatherForcaster/logs/one_cent_trader.log",
-     "max_log_age_min": 5},
+     # v1 (Kalshi) logs event-driven, not on a fixed heartbeat — overnight quiet
+     # periods gap 5-7 min. 20 min clears normal quiet; oct_ws_liveness (3h) is
+     # the backstop for a genuinely silent/wedged v1.
+     "max_log_age_min": 20},
     {"name": "OCT v2 core", "service": "oct",
      "log_path": "/var/www/html/OneCentTrader/logs/oct.log",
      "max_log_age_min": 2},
