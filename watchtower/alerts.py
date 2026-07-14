@@ -30,7 +30,14 @@ def send_discord(title: str, message: str, color: int = 0xFF0000):
 
 
 def send_ntfy(topic: str, title: str, message: str, priority: str = 'high'):
-    """Send a push notification via ntfy. Fails silently."""
+    """Send a push notification via ntfy. Fails silently.
+
+    Fleet-wide kill switch: set WT_NTFY_DISABLED=true in the environment to
+    suppress all ntfy pushes (Discord is unaffected). Enabled once UptimeRobot
+    became the primary loud-alert path and ntfy became redundant.
+    """
+    if os.getenv('WT_NTFY_DISABLED', '').strip().lower() in ('1', 'true', 'yes', 'on'):
+        return
     if not topic:
         return
     ntfy_url = os.getenv('NTFY_URL', 'https://ntfy.sh')
