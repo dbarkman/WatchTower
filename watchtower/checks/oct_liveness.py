@@ -31,7 +31,7 @@ DEFAULT_UNITS = [
      # periods gap 5-7 min. 20 min clears normal quiet; oct_ws_liveness (3h) is
      # the backstop for a genuinely silent/wedged v1.
      "max_log_age_min": 20},
-    {"name": "OCT v2 core", "service": "oct",
+    {"name": "OCT v2 core", "service": "oct@polymarket_us",
      "log_path": "/var/www/html/OneCentTrader/logs/oct.log",
      "max_log_age_min": 2},
     {"name": "OCT v2 web", "service": "oct-web",
