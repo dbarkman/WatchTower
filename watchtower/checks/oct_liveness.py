@@ -32,8 +32,10 @@ DEFAULT_UNITS = [
      # the backstop for a genuinely silent/wedged v1.
      "max_log_age_min": 20},
     {"name": "OCT v2 core", "service": "oct@polymarket_us",
+     # oct.polymarket_us.log heartbeat is ~every 3 min (was ~8s on old oct.log);
+     # 6 min = 2x heartbeat, tolerates a missed beat without flapping.
      "log_path": "/var/www/html/OneCentTrader/logs/oct.polymarket_us.log",
-     "max_log_age_min": 2},
+     "max_log_age_min": 6},
     {"name": "OCT v2 web", "service": "oct-web",
      "log_path": None, "max_log_age_min": None},
 ]
