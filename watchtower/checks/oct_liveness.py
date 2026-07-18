@@ -25,12 +25,11 @@ from watchtower.checks import CheckResult, OK, WARNING, CRITICAL
 
 # Single source of truth for both the report path and the cron path.
 DEFAULT_UNITS = [
-    {"name": "OCT v1", "service": "one_cent_trader_ws",
-     "log_path": "/var/www/html/WeatherForcaster/logs/one_cent_trader.log",
-     # v1 (Kalshi) logs event-driven, not on a fixed heartbeat — overnight quiet
-     # periods gap 5-7 min. 20 min clears normal quiet; oct_ws_liveness (3h) is
-     # the backstop for a genuinely silent/wedged v1.
-     "max_log_age_min": 20},
+    # OCT v1 (one_cent_trader_ws, Kalshi) intentionally NOT monitored here during
+    # the v1→v2 migration — v1 is being wound down and may be down as expected, so
+    # including it produced false DOWN flags. Re-add it (+ the UptimeRobot monitor)
+    # if v1 is brought back as a fallback. oct_ws_liveness (3h) still covers v1 if
+    # it IS running. Removed 2026-07-18.
     # v2 core runs per-venue (oct@<venue>), each logging oct.<venue>.log with a
     # ~3-min observability heartbeat; 5-min freshness threshold tolerates that.
     {"name": "OCT v2 PM.us", "service": "oct@polymarket_us",
