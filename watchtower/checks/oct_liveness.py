@@ -44,6 +44,16 @@ DEFAULT_UNITS = [
 DEFAULT_STATE = "/var/www/html/WatchTower/state/oct_liveness.json"
 DEFAULT_REALERT_MIN = 30
 
+# Restart grace: OCT venue daemons (esp. oct@kalshi, which holds the full ~1.1GB
+# Kalshi book) take up to ~90s to drain + restart — a window that reads as DOWN
+# and, without grace, flaps /health/oct (UptimeRobot) and the Discord alert on
+# every restart. run_with_grace() suppresses a down state until it has persisted
+# >= OCT_LIVENESS_GRACE_SEC. The root cron and the apache health endpoint each
+# pass their OWN grace-state path so neither writes the other's (root vs apache).
+DEFAULT_GRACE_SEC = 150
+DEFAULT_GRACE_STATE = "/var/www/html/WatchTower/state/oct_liveness_grace.json"          # root cron
+DEFAULT_GRACE_STATE_ENDPOINT = "/var/www/html/WatchTower/state/oct_liveness_grace_ep.json"  # apache /health/oct
+
 
 def _is_active(service: str) -> bool:
     try:
@@ -107,6 +117,45 @@ def _save_state(path: str, state: dict):
         pass
 
 
+def run_with_grace(config: dict | None = None, grace_sec: float | None = None,
+                   state_path: str | None = None) -> list[CheckResult]:
+    """run(), but hold a newly-down unit as OK ('restarting Ns') until it has
+    been continuously down >= grace_sec — then report the real down/wedged status.
+
+    Suppresses the ~90s oct@kalshi restart window so it doesn't flap /health/oct
+    (UptimeRobot) or the Discord alert. A recovery clears the timer immediately,
+    so two restarts with an up-tick between them are two short events, not one
+    long one. Each caller passes its own state_path (root cron vs apache endpoint)
+    so there is no cross-user write conflict. A genuine outage still surfaces once
+    it outlasts the grace window.
+    """
+    config = config or {}
+    if grace_sec is None:
+        grace_sec = float(os.getenv("OCT_LIVENESS_GRACE_SEC", DEFAULT_GRACE_SEC))
+    state_path = state_path or os.getenv("OCT_LIVENESS_GRACE_STATE", DEFAULT_GRACE_STATE)
+
+    results = run(config)
+    state = _load_state(state_path)
+    now = time.time()
+    new_state = {}
+    graced = []
+    for r in results:
+        if r.status == OK:
+            graced.append(r)  # healthy -> drop down_since (not carried forward)
+            continue
+        down_since = state.get(r.name, {}).get("down_since") or now
+        new_state[r.name] = {"down_since": down_since}
+        down_for = now - down_since
+        if down_for < grace_sec:
+            graced.append(CheckResult(
+                r.name, OK,
+                f"restarting {down_for:.0f}s (<{grace_sec:.0f}s grace) — {r.summary}"))
+        else:
+            graced.append(r)
+    _save_state(state_path, new_state)
+    return graced
+
+
 def _cron_main():
     from dotenv import load_dotenv
     load_dotenv()
@@ -117,7 +166,7 @@ def _cron_main():
     topic = os.getenv("WT_NTFY_TOPIC", "WT-Health")
     host = socket.gethostname()
 
-    results = run({})
+    results = run_with_grace()
     state = _load_state(state_path)
     now = time.time()
     new_state = {}

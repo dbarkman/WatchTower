@@ -104,9 +104,15 @@ def health_oct():
     Returns 200 when every OCT unit is up with a fresh log, 503 if any is
     down or wedged. Same signal as the every-2-min oct_liveness cron; exposes
     only up/down + unit names (no financial data).
+
+    Uses run_with_grace so a brief venue restart (oct@kalshi drains for ~90s)
+    doesn't flap this endpoint — a unit must stay down past the grace window
+    before we report 503. Its own grace-state file (apache-owned) keeps this
+    independent of the root cron's grace state.
     """
     from watchtower.checks import oct_liveness, OK as _OK
-    results = oct_liveness.run({})
+    results = oct_liveness.run_with_grace(
+        state_path=oct_liveness.DEFAULT_GRACE_STATE_ENDPOINT)
     healthy = all(r.status == _OK for r in results)
     return JSONResponse(
         status_code=200 if healthy else 503,
