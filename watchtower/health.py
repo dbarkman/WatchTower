@@ -13,12 +13,15 @@ Configure via environment variables:
   WATCHTOWER_LOG_PATH      — log file to check freshness (optional)
   WATCHTOWER_STALE_SECONDS — max log age before "stale" (default: 300)
 """
+import hmac
 import os
 import subprocess
 import time
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+
+from watchtower import stats as _stats
 
 app = FastAPI()
 
@@ -275,3 +278,36 @@ def health_ee_ingest():
             'max_age_min': EE_MAX_AGE_MIN,
         },
     )
+
+
+# --- host + daemon vitals for the OCT server-status dashboard ---------------
+# Unlike every other endpoint here, this one is reachable from off-box on web2
+# (proxied by httpd), so it takes a shared secret. Where no token is configured
+# the endpoint stays open — web1 is loopback-only and does not need one.
+STATS_TOKEN = os.getenv('WATCHTOWER_STATS_TOKEN', '')
+
+
+def _stats_authorized(request: Request) -> bool:
+    if not STATS_TOKEN:
+        return True
+    sent = request.headers.get('x-watchtower-token', '')
+    auth = request.headers.get('authorization', '')
+    if not sent and auth.lower().startswith('bearer '):
+        sent = auth[7:]
+    # Constant-time compare: a naive == leaks the token a character at a time to
+    # anyone who can measure the response.
+    return hmac.compare_digest(sent, STATS_TOKEN)
+
+
+@app.get('/stats')
+def stats(request: Request):
+    """Full host vitals for the dashboard. See :mod:`watchtower.stats`.
+
+    Reuses this module's already-deployed mount/disk helpers rather than forking a
+    second copy of that logic.
+    """
+    if not _stats_authorized(request):
+        # 404, not 401: an unauthenticated caller should not learn the endpoint
+        # exists, matching how oct-web answers bare requests.
+        return JSONResponse(status_code=404, content={'detail': 'Not Found'})
+    return _stats.collect_stats(_real_mounts, _disk_pct, _inode_pct)
