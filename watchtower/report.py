@@ -2,7 +2,10 @@
 """
 Daily Health Report
 ===================
-Runs all configured checks and sends a digest via Discord and/or ntfy.
+Runs all configured checks and sends a digest to Discord.
+
+This daily report is the ONLY thing WatchTower pushes to Discord. Intraday
+alerting is UptimeRobot's, via the public /health/* endpoints.
 Designed to run via cron (e.g., once or twice daily).
 
 Usage:
@@ -18,8 +21,8 @@ import yaml
 from dotenv import load_dotenv
 
 from watchtower.checks import CheckResult, OK, WARNING, CRITICAL
-from watchtower.checks import disk, memory, oom, services, auth, fail2ban, ssl, process_rss, wallets, uptime, oct_ws_liveness, oct_liveness
-from watchtower.alerts import send_discord, send_ntfy
+from watchtower.checks import disk, memory, oom, services, auth, fail2ban, ssl, process_rss, wallets, uptime, oct_liveness
+from watchtower.alerts import send_discord
 
 load_dotenv()
 
@@ -40,7 +43,6 @@ CHECK_MODULES = {
     "ssl": ssl,
     "process_rss": process_rss,
     "wallets": wallets,
-    "oct_ws_liveness": oct_ws_liveness,
     "oct_liveness": oct_liveness,
 }
 
@@ -91,17 +93,6 @@ def format_digest(server_name: str, results: list[CheckResult]) -> str:
     if not counts[CRITICAL] and not counts[WARNING]:
         lines.append("No issues requiring attention.")
 
-    return "\n".join(lines)
-
-
-def _format_ntfy_short(server_name: str, results: list[CheckResult]) -> str:
-    """Short ntfy message — just the problems, one line each."""
-    issues = [r for r in results if r.status != OK]
-    if not issues:
-        return f"{server_name}: all clear"
-    lines = []
-    for r in issues:
-        lines.append(f"{r.icon} {r.name}: {r.summary}")
     return "\n".join(lines)
 
 
@@ -171,17 +162,6 @@ def send_digest(server_name: str, results: list[CheckResult], config: dict):
             )
         except Exception as e:
             logger.warning(f"Discord alert failed: {e}")
-
-    # --- ntfy: short and simple (only on issues) ---
-    ntfy_topic = config.get("ntfy_topic")
-    if ntfy_topic and (has_critical or has_warning):
-        ntfy_title = f"{server_name}: {'CRITICAL' if has_critical else 'WARNING'}"
-        ntfy_body = _format_ntfy_short(server_name, results)
-        priority = "urgent" if has_critical else "high"
-        send_ntfy(ntfy_topic, ntfy_title, ntfy_body, priority=priority)
-    elif ntfy_topic and config.get("ntfy_always", False):
-        send_ntfy(ntfy_topic, f"{server_name}: all clear",
-                  f"{counts[OK]} checks passed", priority="low")
 
 
 def main():

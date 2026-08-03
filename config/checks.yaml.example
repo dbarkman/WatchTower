@@ -8,12 +8,6 @@
 # Server identity (used in report header)
 server_name: web1
 
-# Ntfy topic for push alerts (only fires when issues found)
-ntfy_topic: "WT-Health"
-
-# Set true to send ntfy even when everything is OK
-ntfy_always: false
-
 checks:
   # Disk space — alert when partitions get full
   disk:
@@ -68,15 +62,10 @@ checks:
   # OCT WebSocket liveness — age of the last settlement/fill in the trader log.
   # Catches a silently-dead fills/positions socket (process stays up, events
   # stop). Daily report shows the age; the every-3h cron alerts when stale.
-  oct_ws_liveness:
-    log_path: /var/www/html/WeatherForcaster/logs/one_cent_trader.log
-    warn_hours: 3
-    critical_hours: 6
-
   # OCT process liveness (v1 + v2) — each trading unit is `systemctl is-active`
   # AND writing its log recently. Catches down/wedged daemons. Units are defined
   # in watchtower/checks/oct_liveness.py DEFAULT_UNITS; empty block enables it.
-  # Also runs standalone every 2 min (cron) with ntfy/Discord state-change alerts.
+  # Also runs standalone every 2 min (cron), log-only, for forensic history.
   oct_liveness: {}
 
   # On-chain wallet balances — alert when running low on gas or capital.

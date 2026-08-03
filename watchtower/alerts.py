@@ -1,8 +1,15 @@
 """
-Alert Dispatchers
-=================
-Send notifications via Discord webhooks and ntfy push.
-Self-contained — no external project dependencies.
+Alert Dispatcher
+================
+Sends the daily WatchTower report to Discord. Self-contained — no external
+project dependencies.
+
+Scope note: Discord carries the DAILY REPORT ONLY (report.py). Intraday
+down-alerting is UptimeRobot's job — it polls the public /health/* endpoints
+served by health.py every 5 min and pushes to David's phone. The intraday
+check paths (monitor.py, oct_liveness.py, oct_down_alert.py) are therefore
+log-only: they still record state to their log files for forensics, but do
+not notify. ntfy was removed entirely on 2026-08-03 (app retired).
 """
 import logging
 import os
@@ -27,26 +34,3 @@ def send_discord(title: str, message: str, color: int = 0xFF0000):
         )
     except Exception as e:
         logger.warning(f'Discord alert failed: {e}')
-
-
-def send_ntfy(topic: str, title: str, message: str, priority: str = 'high'):
-    """Send a push notification via ntfy. Fails silently.
-
-    Fleet-wide kill switch: set WT_NTFY_DISABLED=true in the environment to
-    suppress all ntfy pushes (Discord is unaffected). Enabled once UptimeRobot
-    became the primary loud-alert path and ntfy became redundant.
-    """
-    if os.getenv('WT_NTFY_DISABLED', '').strip().lower() in ('1', 'true', 'yes', 'on'):
-        return
-    if not topic:
-        return
-    ntfy_url = os.getenv('NTFY_URL', 'https://ntfy.sh')
-    try:
-        requests.post(
-            f'{ntfy_url}/{topic}',
-            data=message.encode('utf-8'),
-            headers={'Title': title, 'Priority': priority},
-            timeout=REQUEST_TIMEOUT,
-        )
-    except Exception as e:
-        logger.warning(f'Ntfy alert failed: {e}')

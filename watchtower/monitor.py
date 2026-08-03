@@ -6,7 +6,7 @@ Checks remote server health endpoints and alerts on consecutive failures.
 Designed to run via cron (e.g., every minute).
 
 Can operate in two modes:
-  1. CLI args:  watchtower-monitor --url https://example.com/health --name "My Server" --ntfy-topic MY-Up
+  1. CLI args:  watchtower-monitor --url https://example.com/health --name "My Server"
   2. Config file: watchtower-monitor --config config/targets.yaml  (checks all targets)
 
 State is tracked in flat files under the state/ directory. Each target gets
@@ -22,7 +22,6 @@ import requests
 import yaml
 from dotenv import load_dotenv
 
-from watchtower.alerts import send_discord, send_ntfy
 
 load_dotenv()
 
@@ -77,23 +76,16 @@ def check_health(url: str, timeout: int = DEFAULT_TIMEOUT) -> dict:
         return {'ok': False, 'status_code': None, 'body': {'detail': str(e)}}
 
 
-def check_target(url: str, name: str, ntfy_topic: str = None,
+def check_target(url: str, name: str,
                  threshold: int = DEFAULT_FAILURE_THRESHOLD,
                  timeout: int = DEFAULT_TIMEOUT) -> bool:
-    """Check one target and alert after consecutive failures."""
+    """Check one target, logging state after consecutive failures."""
     result = check_health(url, timeout=timeout)
 
     if result['ok']:
         prev_failures = _read_failure_count(name)
         if prev_failures >= threshold:
             logger.info(f'✅ {name} recovered after {prev_failures} failures')
-            send_discord(
-                f'✅ {name} recovered',
-                f'Health check passing again after {prev_failures} consecutive failures',
-                color=0x00FF00,
-            )
-            send_ntfy(ntfy_topic, f'{name} recovered',
-                      f'Back online after {prev_failures} consecutive failures')
         _write_failure_count(name, 0)
 
         status = result['body'].get('status', 'ok')
@@ -113,10 +105,10 @@ def check_target(url: str, name: str, ntfy_topic: str = None,
 
     if failures >= threshold:
         alert_detail = f'HTTP {status_code}\n{detail}' if status_code else detail
-        send_discord(f'🚨 {name} is DOWN',
-                     f'{failures} consecutive failures\nURL: {url}\n{alert_detail}')
-        send_ntfy(ntfy_topic, f'{name} is DOWN',
-                  f'{failures} consecutive failures\n{alert_detail}')
+        # Log-only: UptimeRobot polls this peer's /health directly and is the
+        # notification path. This record is forensic history.
+        logger.error(f'🚨 {name} is DOWN — {failures} consecutive failures '
+                     f'(URL: {url}, {alert_detail})')
 
     return False
 
@@ -135,7 +127,6 @@ def run_config(config_path: str):
         check_target(
             url=target['url'],
             name=target['name'],
-            ntfy_topic=target.get('ntfy_topic'),
             threshold=target.get('failure_threshold', DEFAULT_FAILURE_THRESHOLD),
             timeout=target.get('timeout', DEFAULT_TIMEOUT),
         )
@@ -145,7 +136,6 @@ def main():
     parser = argparse.ArgumentParser(description='WatchTower — remote health monitor')
     parser.add_argument('--url', help='Health endpoint URL (single target mode)')
     parser.add_argument('--name', help='Friendly name for alerts (single target mode)')
-    parser.add_argument('--ntfy-topic', default=None, help='Ntfy topic for push notifications')
     parser.add_argument('--config', default=None, help='Path to targets.yaml (multi-target mode)')
     parser.add_argument('--threshold', type=int, default=DEFAULT_FAILURE_THRESHOLD,
                         help=f'Consecutive failures before alerting (default: {DEFAULT_FAILURE_THRESHOLD})')
@@ -156,7 +146,7 @@ def main():
     if args.config:
         run_config(args.config)
     elif args.url and args.name:
-        check_target(args.url, args.name, ntfy_topic=args.ntfy_topic,
+        check_target(args.url, args.name,
                      threshold=args.threshold, timeout=args.timeout)
     else:
         parser.error('Either --config or both --url and --name are required')

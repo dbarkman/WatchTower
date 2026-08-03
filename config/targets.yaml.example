@@ -6,7 +6,6 @@
 targets:
   - name: "Web Server"
     url: "https://example.com/health"
-    ntfy_topic: "WEB1-Up"
     # How many consecutive failures before alerting (default: 2)
     failure_threshold: 2
     # Request timeout in seconds (default: 10)
@@ -14,9 +13,7 @@ targets:
 
   - name: "API Server"
     url: "https://api.example.com/health/daemon"
-    ntfy_topic: "API1-Up"
 
   - name: "Database Server"
     url: "https://db.example.com/health"
-    ntfy_topic: "DB1-Up"
     failure_threshold: 3

@@ -1,19 +1,21 @@
-"""OCT process liveness check (v1 + v2).
+"""OCT process liveness check.
 
-Complements oct_ws_liveness (which watches WS *event* freshness). This watches
-whether the trading *processes* are actually up and still emitting output:
+Watches whether the trading *processes* are actually up and still emitting
+output:
 
   * systemctl is-active for each unit, and
-  * log-file mtime freshness — the daemons write continuously (v2 emits an
-    'oct.observability heartbeat' every few seconds; v1 logs its reconcile loop
-    constantly), so a wedged-but-running process is caught too.
+  * log-file mtime freshness — the daemons write continuously (each v2 venue
+    emits an 'oct.observability heartbeat' every ~3 min), so a wedged-but-running
+    process is caught too.
 
-Used two ways:
+Used three ways:
   * Daily 12:00 UTC report — one line per unit (up/down + log age).
+  * The public /health/oct endpoint (health.py), which UptimeRobot polls every
+    5 min — this is the notification path.
   * Standalone every-2-min cron (python -m watchtower.checks.oct_liveness) —
-    pushes ntfy + Discord on state change (down / recovered), re-alerting every
-    OCT_LIVENESS_REALERT_MIN (default 30) while still down. State is persisted
-    so it never spams on every tick.
+    LOG-ONLY as of 2026-08-03. It records state changes to oct_liveness.log for
+    forensic history (2-min resolution) but sends no notifications; state is
+    persisted so the log doesn't repeat on every tick.
 """
 import json
 import os
@@ -25,11 +27,9 @@ from watchtower.checks import CheckResult, OK, WARNING, CRITICAL
 
 # Single source of truth for both the report path and the cron path.
 DEFAULT_UNITS = [
-    # OCT v1 (one_cent_trader_ws, Kalshi) intentionally NOT monitored here during
-    # the v1→v2 migration — v1 is being wound down and may be down as expected, so
-    # including it produced false DOWN flags. Re-add it (+ the UptimeRobot monitor)
-    # if v1 is brought back as a fallback. oct_ws_liveness (3h) still covers v1 if
-    # it IS running. Removed 2026-07-18.
+    # OCT v1 (one_cent_trader_ws, Kalshi) is retired — the Kalshi book migrated
+    # to the v2 oct@kalshi unit. Removed here 2026-07-18. Re-add it (+ a
+    # UptimeRobot monitor) only if v1 is ever brought back as a fallback.
     # v2 core runs per-venue (oct@<venue>), each logging oct.<venue>.log with a
     # ~3-min observability heartbeat; 5-min freshness threshold tolerates that.
     {"name": "OCT v2 PM.us", "service": "oct@polymarket_us",
@@ -159,11 +159,9 @@ def run_with_grace(config: dict | None = None, grace_sec: float | None = None,
 def _cron_main():
     from dotenv import load_dotenv
     load_dotenv()
-    from watchtower.alerts import send_ntfy, send_discord
 
     state_path = os.getenv("OCT_LIVENESS_STATE", DEFAULT_STATE)
     realert_min = float(os.getenv("OCT_LIVENESS_REALERT_MIN", DEFAULT_REALERT_MIN))
-    topic = os.getenv("WT_NTFY_TOPIC", "WT-Health")
     host = socket.gethostname()
 
     results = run_with_grace()
@@ -186,17 +184,14 @@ def _cron_main():
         elif not healthy and (now - last_alert) >= realert_min * 60:
             fire = "still-down"
 
+        # Log-only as of 2026-08-03: state transitions are recorded to
+        # oct_liveness.log (2-min resolution uptime history for forensics).
+        # Notification is UptimeRobot's, via the public /health/oct endpoint.
         if fire == "recovered":
-            send_ntfy(topic, f"{host}: OCT recovered",
-                      f"✅ {r.name}: {r.summary}", priority="high")
-            send_discord(f"✅ {host} — OCT recovered",
-                         f"{r.name}: {r.summary}", color=0x00FF00)
+            print(f"STATE-CHANGE recovered — {host} {r.name}: {r.summary}")
             last_alert = 0
         elif fire in ("down", "still-down"):
-            send_ntfy(topic, f"{host}: OCT DOWN",
-                      f"{r.icon} {r.name}: {r.summary}", priority="urgent")
-            send_discord(f"{r.icon} {host} — OCT DOWN",
-                         f"{r.name}: {r.summary}", color=0xFF0000)
+            print(f"STATE-CHANGE {fire} — {host} {r.name}: {r.summary}")
             last_alert = now
 
         new_state[key] = {"healthy": healthy, "last_alert": (last_alert if not healthy else 0)}
