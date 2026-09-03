@@ -1,0 +1,16 @@
+#!/bin/bash
+# wt-stamp — record that a scheduled job SUCCEEDED.
+#
+#   wt-stamp <name> <command...>
+#
+# Runs the command; touches state/stamps/<name> only on exit 0. The WatchTower
+# job_stamps check reads those mtimes, so a job that starts failing goes stale
+# and surfaces in the daily report instead of failing silently forever.
+set -uo pipefail
+STAMP_DIR="${WT_STAMP_DIR:-/var/www/html/WatchTower/state/stamps}"
+name="${1:?usage: wt-stamp <name> <command...>}"; shift
+"$@"; rc=$?
+if [ $rc -eq 0 ]; then
+  mkdir -p "$STAMP_DIR" && touch "$STAMP_DIR/$name"
+fi
+exit $rc

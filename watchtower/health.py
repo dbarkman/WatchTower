@@ -14,14 +14,19 @@ Configure via environment variables:
   WATCHTOWER_STALE_SECONDS — max log age before "stale" (default: 300)
 """
 import hmac
+import json
+import logging
 import os
 import subprocess
 import time
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, ConfigDict, Field
 
 from watchtower import stats as _stats
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
@@ -311,3 +316,67 @@ def stats(request: Request):
         # exists, matching how oct-web answers bare requests.
         return JSONResponse(status_code=404, content={'detail': 'Not Found'})
     return _stats.collect_stats(_real_mounts, _disk_pct, _inode_pct)
+
+
+# --- Workstation posture intake (macOS) -----------------------------------
+# The laptop is named explicitly in the vendor security questionnaire and holds
+# the SSH key to production, so its posture has to be asserted rather than
+# assumed. It cannot be pulled (roaming, NAT, and the server must never hold
+# workstation credentials), and SSH push is awkward now that the key carries a
+# passphrase a launchd job cannot supply. So the laptop PUSHES here.
+#
+# Deliberately minimal attack surface: bearer token, fixed schema, size cap,
+# and the only side effect possible is replacing one state file. No shell, no
+# path from the payload to the filesystem.
+
+WORKSTATION_TOKEN = os.getenv('WATCHTOWER_WORKSTATION_TOKEN', '')
+WORKSTATION_STATE = os.getenv(
+    'WATCHTOWER_WORKSTATION_STATE',
+    '/var/www/html/WatchTower/state/workstation.json')
+_MAX_BODY = 4096
+
+
+class WorkstationPosture(BaseModel):
+    """Strict schema — unknown fields are rejected, not stored."""
+    model_config = ConfigDict(extra='forbid')
+
+    hostname: str = Field(max_length=128)
+    os_version: str = Field(max_length=64)
+    filevault: bool
+    firewall: bool
+    screen_lock: bool
+    updates_pending: int = Field(ge=0, le=9999)
+    security_updates_pending: int = Field(ge=0, le=9999)
+
+
+@app.post('/health/workstation')
+async def workstation_intake(payload: WorkstationPosture, request: Request):
+    if not WORKSTATION_TOKEN:
+        return JSONResponse(status_code=503,
+                            content={'status': 'intake not configured'})
+
+    supplied = (request.headers.get('authorization') or '')
+    if not supplied.startswith('Bearer '):
+        return JSONResponse(status_code=401, content={'status': 'unauthorized'})
+    if not hmac.compare_digest(supplied[7:], WORKSTATION_TOKEN):
+        return JSONResponse(status_code=401, content={'status': 'unauthorized'})
+
+    cl = request.headers.get('content-length')
+    if cl and cl.isdigit() and int(cl) > _MAX_BODY:
+        return JSONResponse(status_code=413, content={'status': 'payload too large'})
+
+    # received_at is stamped SERVER-side: a laptop with a wrong clock must not be
+    # able to make a stale report look fresh.
+    record = payload.model_dump()
+    record['received_at'] = time.time()
+    try:
+        os.makedirs(os.path.dirname(WORKSTATION_STATE), exist_ok=True)
+        tmp = WORKSTATION_STATE + '.tmp'
+        with open(tmp, 'w') as f:
+            json.dump(record, f)
+        os.replace(tmp, WORKSTATION_STATE)
+    except OSError as e:
+        logger.warning(f'workstation intake write failed: {e}')
+        return JSONResponse(status_code=500, content={'status': 'write failed'})
+
+    return JSONResponse(status_code=200, content={'status': 'recorded'})

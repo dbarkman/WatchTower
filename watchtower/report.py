@@ -21,7 +21,10 @@ import yaml
 from dotenv import load_dotenv
 
 from watchtower.checks import CheckResult, OK, WARNING, CRITICAL
-from watchtower.checks import disk, memory, oom, services, auth, fail2ban, ssl, process_rss, wallets, uptime, oct_liveness, needs_restart
+from watchtower.checks import (disk, memory, oom, services, auth, fail2ban, ssl,
+                               process_rss, wallets, uptime, oct_liveness, needs_restart,
+                               job_stamps, cve_advisories, dep_audit, eol, lynis,
+                               workstation)
 from watchtower.alerts import send_discord
 
 load_dotenv()
@@ -35,6 +38,12 @@ logging.basicConfig(
 CHECK_MODULES = {
     "uptime": uptime,
     "needs_restart": needs_restart,
+    "job_stamps": job_stamps,
+    "cve_advisories": cve_advisories,
+    "dep_audit": dep_audit,
+    "eol": eol,
+    "lynis": lynis,
+    "workstation": workstation,
     "disk": disk,
     "memory": memory,
     "oom": oom,
