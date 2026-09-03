@@ -4,16 +4,16 @@ version = "0.1.0"
 description = "Lightweight server health monitoring — check remote endpoints, expose local health, alert on failures."
 requires-python = ">=3.12"
 dependencies = [
-    "requests==2.32.3",
-    "python-dotenv==1.0.0",
-    "fastapi==0.115.12",
-    "uvicorn==0.34.2",
+    "requests==2.33.0",
+    "python-dotenv==1.2.2",
+    "fastapi==0.136.1",
+    "uvicorn==0.46.0",
     "pyyaml==6.0.2",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest==8.3.5",
+    "pytest==9.0.3",
     # starlette.testclient requires httpx; used only by the test suite.
     "httpx==0.28.1",
 ]
