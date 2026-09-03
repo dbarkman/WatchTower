@@ -28,11 +28,26 @@ NPM = "/usr/bin/npm"
 CACHE = "/var/cache/uv"
 DEFAULT_OUT = "/var/www/html/WatchTower/state/dep_audit.json"
 
+# This runs as `apache`, whose home (/usr/share/httpd) is not writable. uv wants
+# to create a tool dir and a managed-python dir under $HOME by default and dies
+# with EACCES if it cannot, so point every uv-writable path at the shared cache
+# that apache already owns. Without this, pip-audit fails for every project while
+# npm audit quietly succeeds — which looks like "Python is fine" rather than
+# "Python was never scanned".
+_ENV = {
+    **os.environ,
+    "HOME": CACHE,
+    "UV_CACHE_DIR": CACHE,
+    "UV_TOOL_DIR": os.path.join(CACHE, "tools"),
+    "UV_PYTHON_INSTALL_DIR": os.path.join(CACHE, "python"),
+    "XDG_DATA_HOME": os.path.join(CACHE, "share"),
+}
+
 
 def _run(cmd, cwd=None, timeout=300):
     try:
         return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True,
-                              timeout=timeout)
+                              timeout=timeout, env=_ENV)
     except Exception as e:
         return subprocess.CompletedProcess(cmd, 1, "", str(e))
 
