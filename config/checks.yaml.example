@@ -59,9 +59,6 @@ checks:
         warn_mb: 500
         critical_mb: 1000
 
-  # OCT WebSocket liveness — age of the last settlement/fill in the trader log.
-  # Catches a silently-dead fills/positions socket (process stays up, events
-  # stop). Daily report shows the age; the every-3h cron alerts when stale.
   # OCT process liveness (v1 + v2) — each trading unit is `systemctl is-active`
   # AND writing its log recently. Catches down/wedged daemons. Units are defined
   # in watchtower/checks/oct_liveness.py DEFAULT_UNITS; empty block enables it.
