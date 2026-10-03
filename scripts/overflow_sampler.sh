@@ -31,8 +31,11 @@ top=$(for f in /var/log/httpd/*access_log /var/log/httpd/*access.log; do
       done | grep -F "[$minute" | awk '{print $1}' | sort | uniq -c | sort -rn | head -3 |
       awk '{printf "%s=%s ", $2, $1}')
 queues=$(ss -Htln | awk '$2 > 0 {printf "%s:%s/%s ", $4, $2, $3}')
-synrecv=$(ss -Htn state syn-recv | wc -l)
+# The overflow counter covers every port. Half-open connections grouped by local
+# port show which listener the burst hit, e.g. SSH brute force on :22 vs web on :443.
+synrecv=$(ss -Htn state syn-recv | awk '{n = split($3, a, ":"); print a[n]}' |
+          sort | uniq -c | sort -rn | awk '{printf ":%s=%s ", $2, $1}')
 load=$(cut -d' ' -f1 /proc/loadavg)
 
-printf '%s drops=%s load=%s synrecv=%s queues=[%s] top=[%s]\n' \
-    "$(date -u '+%Y-%m-%d %H:%M')" "$drops" "$load" "$synrecv" "${queues% }" "${top% }" >> "$LOG"
+printf '%s drops=%s load=%s synrecv=[%s] queues=[%s] top=[%s]\n' \
+    "$(date -u '+%Y-%m-%d %H:%M')" "$drops" "$load" "${synrecv% }" "${queues% }" "${top% }" >> "$LOG"
