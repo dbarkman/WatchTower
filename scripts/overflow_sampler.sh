@@ -35,7 +35,16 @@ queues=$(ss -Htln | awk '$2 > 0 {printf "%s:%s/%s ", $4, $2, $3}')
 # port show which listener the burst hit, e.g. SSH brute force on :22 vs web on :443.
 synrecv=$(ss -Htn state syn-recv | awk '{n = split($3, a, ":"); print a[n]}' |
           sort | uniq -c | sort -rn | awk '{printf ":%s=%s ", $2, $1}')
+
+# A connection flood never reaches the access log, so name the remote hosts
+# directly from the socket table: who holds half-open connections, and who holds
+# the most established web connections.
+peer_ip='{ ip = $4; sub(/:[0-9]+$/, "", ip); gsub(/^\[(::ffff:)?|\]$/, "", ip); print ip }'
+top_peers() { sort | uniq -c | sort -rn | head -3 | awk '{printf "%s=%s ", $2, $1}'; }
+halfopen=$(ss -Htn state syn-recv | awk "$peer_ip" | top_peers)
+established=$(ss -Htn state established '( sport = :443 or sport = :80 )' | awk "$peer_ip" | top_peers)
 load=$(cut -d' ' -f1 /proc/loadavg)
 
-printf '%s drops=%s load=%s synrecv=[%s] queues=[%s] top=[%s]\n' \
-    "$(date -u '+%Y-%m-%d %H:%M')" "$drops" "$load" "${synrecv% }" "${queues% }" "${top% }" >> "$LOG"
+printf '%s drops=%s load=%s synrecv=[%s] queues=[%s] halfopen=[%s] established=[%s] top=[%s]\n' \
+    "$(date -u '+%Y-%m-%d %H:%M')" "$drops" "$load" "${synrecv% }" "${queues% }" \
+    "${halfopen% }" "${established% }" "${top% }" >> "$LOG"
